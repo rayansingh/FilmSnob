@@ -239,7 +239,30 @@ What we still need to finish before the end of the semester:
 \end{enumerate}
 
 \section{Conclusion}
-% TODO
+Summary
+The FilmSnob system has both a content-based and predictive model. Given films the user has rated, it retrieves similar films by matching descriptions, genres, casts, keywords using TF-IDF and BM25. It can also predict based on a user’s rating history the score they would assign to any candidate film, and then rank those candidates accordingly.
+
+Data comes from three general sources. The first is movie databases like IMDB and TMDB, whose APIs give us data on any film such as titles, genres, cast, crew, languages, countries of origin, keywords, and more. The second is Kaggle datasets to supply descriptions and keywords to supplement. The third is the Letterboxd platform to provide ratings and reviews from users.
+
+We evaluate the system using personal Letteboxd accounts and mock data. For a given user, we can train the model on half of the ratings and use the model to predict the other half to evaluate it. Comparing predicted ratings to actual ratings provides a direct accuracy measure.
+
+The first few weeks of the project was conducting research on existing models and methods in sentiment analysis, retrieval-augmented generation, and recommendation systems in similar fields. The following weeks were for creating a first draft of the code and creating a report for the first milestone. The final weeks are allocated to model training, integration, testing, and the final written report.
+
+Intro
+Letterboxd and MyAnimeList collectively host millions of user-generated film ratings and written reviews. These platforms capture two district signals of user preference which are numerical ratings and natural language reviews that often convey a nuance a score cannot. Despite this, neither platform has leveraged the massive amount of data they have to generate personalized recommendations for users to watch.
+
+FilmSnob is a recommender system that addresses this problem. Given a user’s Letterboxd history, the system performs sentiment analysis on written reviews, weights the resulting sentiment scores against star reviews, and constructs a preference profile for that user. It then retrieves candidate films the user has not seen, ranks them my predicted ratings, and returns a ranked recommendation list.
+
+The central challenge is representing the non-standardized data into something quantifiable. A five-star rating system compresses the user’s thoughts into a number. A written review is better but harder to mine into data. We encode both into a shared embedding vector that gives the model more perspective. We use SBERT for dense semantic embeddings. With this we build a model that estimates the score a user would give unseen films.
+
+Description
+
+Initial Evaluation
+For our initial evaluation, we plan on performing a train/test split on individual users’ Letterboxd rating histories in which we will be using around 50% of their ratings for training and the remaining 50% for testing. The predictive model was evaluated by comparing predicted ratings against the actual user rating by using standard regression metrics, something like mean absolute error (MAE) and root mean squared error (RMSE). For our retrieval component, we will assess whether top ranked recommendations aligned with the user’s known preferences in genre and themes. Early results will show that the hybrid approach will perform better than a simple content-based or predictive ranking method, specifically for users with a moderate rating history.
+
+Insights so far
+With semantic embedding, we can use extracted data from user reviews to add more meaningful signals when ratings are ambiguous or inconsistent. We also observed that user preferences are often more complex than a simple genre matching in which factors like themes captured in text embeddings are able to play a major role in improving recommendations. Current limitations that we come across include some sarcastic reviews that are inconsistent with users and balancing the weight between numerical ratings and textual ratings which will be a focus for fine tuning the model.
+
 
 \bibliographystyle{ACM-Reference-Format}
 
