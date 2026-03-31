@@ -18,22 +18,38 @@
 \title{FilmSnob: Personalized Movie Recommendations from Letterboxd Reviews}
 
 \author{Rayan Singh}
+\email{rayans2@illinois.edu}
 \affiliation{\institution{University of Illinois Urbana-Champaign}\country{}}
 \author{Ryan Vir}
+\email{ryansv2@illinois.edu}
 \affiliation{\institution{University of Illinois Urbana-Champaign}\country{}}
 \author{Tony Chan}
+\email{tchan34@illinois.edu}
 \affiliation{\institution{University of Illinois Urbana-Champaign}\country{}}
 
 \begin{abstract}
-% TODO
+FilmSnob is a content-based movie recommender. Given films a user has rated on Letterboxd, it builds a composite embedding for each film using SBERT to encode plot descriptions and user reviews, combined with structured metadata like genre, year, and popularity. PCA reduces these to 128 dimensions. The system then constructs a rating-weighted user profile vector and ranks unseen films by cosine similarity.
+
+Data comes from two sources. The first is the Letterboxd platform, which provides user ratings and written reviews via public RSS feeds. The second is the TMDB API, which supplies plot summaries, genres, cast, director, keywords, and community ratings for each film.
+
+We evaluate the system qualitatively by generating recommendations for real Letterboxd users and checking whether the results align with their taste. Quantitative evaluation using train/test splits and metrics like Recall@10 is planned for the final report.
+
+The first few weeks of the project were spent researching existing methods in sentence embeddings and recommendation systems. The following weeks were for building the scraping and embedding pipeline and writing the first milestone report. The final weeks are for formal evaluation, baseline comparisons, and the final report.
 \end{abstract}
 
 \maketitle
 
 \section{Introduction}
-% TODO
 
-\section{System Overview}
+Letterboxd hosts millions of user-generated film ratings and written reviews. These capture two distinct signals of user preference: numerical ratings, and natural-language reviews that often convey nuance a star count cannot. Despite this, the platform does not offer personalized recommendations based on a user's own data.
+
+FilmSnob addresses this. Given a user's Letterboxd history, the system encodes each film's content and user reviews into dense vectors using SBERT, combines those with structured metadata (genre, year, director, popularity), and builds a rating-weighted preference profile. It then ranks unseen films by cosine similarity to that profile and returns the top matches.
+
+The central challenge is turning messy, non-standardized data into something comparable. A five-star rating compresses a user's opinion into a single number. A written review is richer but harder to work with. We encode both into a shared embedding space using SBERT, add structured features, and reduce the result with PCA to get a compact vector per film that captures content, reception, and metadata.
+
+\section{Description}
+
+\subsection{System Overview}
 
 FilmSnob is a content-based movie recommender. We scrape a user's Letterboxd diary (what they watched, how they rated it, what they wrote about it), pull in extra metadata from The Movie Database (TMDB), and build a vector for each film that combines sentence-transformer output with structured features like genre and year. PCA brings the dimensionality down to something manageable, and we recommend films by finding the closest unwatched movies to the user's taste profile via cosine similarity.
 
@@ -45,9 +61,9 @@ The pipeline has four stages:
   \item \textbf{Embedding and recommendation:} encode films with SBERT + metadata, reduce with PCA, and run nearest-neighbor search.
 \end{enumerate}
 
-\section{Data Collection}
+\subsection{Data Collection}
 
-\subsection{Letterboxd Ingestion}
+\subsubsection{Letterboxd Ingestion}
 
 We support three ways to get data out of Letterboxd, all of which produce the same internal \texttt{UserProfile} object:
 
@@ -62,11 +78,11 @@ We parse the poster grid at each user's films page for slugs and ratings, then t
 \paragraph{CSV import.}
 Letterboxd lets users export their data as CSV files (\texttt{ratings.csv}, \texttt{reviews.csv}, \texttt{watched.csv}). Parsing these gives the most complete history with no scraping involved, but it requires the user to go through the export process themselves.
 
-\subsection{Profile Discovery}
+\subsubsection{Profile Discovery}
 
 We needed a set of active users to build our film corpus. We scraped the Letterboxd pages for a few popular recent movies (\textit{Oppenheimer}, \textit{Anora}, \textit{The Substance}, etc.), pulled out reviewer usernames from the review links in the page HTML, and checked that each profile page loaded (HTTP~200). This gave us 100 confirmed active users.
 
-\subsection{TMDB Enrichment}
+\subsubsection{TMDB Enrichment}
 
 For each film we query the TMDB API v3 detail endpoint with \texttt{append\_to\_response=keywords,credits} and grab:
 
@@ -81,13 +97,13 @@ For each film we query the TMDB API v3 detail endpoint with \texttt{append\_to\_
 
 Most films already have a \texttt{tmdb\_id} from the RSS feed, so we can fetch details by ID directly. For the few that don't, we fall back to searching by title + year, and retry without the year if nothing comes up. We cap API calls at 4 per second to stay under the rate limit.
 
-\subsection{Cross-User Aggregation}
+\subsubsection{Cross-User Aggregation}
 
 After scraping all 100 users, we merge their data into one corpus. Films are grouped by \texttt{tmdb\_id} so each movie appears once, with all of its user reviews and ratings pooled together. We also store a pre-formatted \texttt{embedding\_text} string (overview + genres + director + keywords) and some aggregate stats like mean rating and review count.
 
 When the same film shows up in multiple users' diaries, we keep all their reviews instead of throwing out duplicates. At embedding time, we encode each review separately with SBERT and average the vectors. A film that 10 people reviewed ends up with a more stable embedding than one with a single review.
 
-\section{Background: PCA}
+\subsection{Background: PCA}
 
 Principal Component Analysis (PCA) is a standard technique for reducing the number of dimensions in a dataset while keeping as much of the variance as possible. Given a matrix of $n$ data points in $d$ dimensions, PCA finds a new set of axes (the principal components) that are linear combinations of the original features, ordered by how much variance each one explains. The first component points in the direction of greatest variance, the second is orthogonal to the first and captures the next most variance, and so on.
 
@@ -97,21 +113,21 @@ In our case, we start with 791-dimensional film vectors (two 384-d SBERT embeddi
 
 Before running PCA, we standardize each feature to zero mean and unit variance with \texttt{StandardScaler}. This is important because the SBERT dimensions are roughly unit-scale, but features like year and vote count are on completely different scales. Without standardization, PCA would be dominated by whichever features happen to have the largest raw values.
 
-\section{Embedding Construction}
+\subsection{Embedding Construction}
 
 We represent each film as a single vector made up of four groups of features. Before PCA, these add up to 791 dimensions:
 
-\subsection{Content Embedding (384 dimensions)}
+\subsubsection{Content Embedding (384 dimensions)}
 
-We concatenate the plot overview, genre names, director, and keywords into one string (\texttt{embedding\_text}) and run it through the \texttt{all-MiniLM-L6-v2} sentence-transformer (22M parameters, 384-d output). This gives us a 384-dimensional vector for each film's content.
+We concatenate the plot overview, genre names, director, and keywords into one string (\texttt{embedding\_text}) and run it through \texttt{all-MiniLM-L6-v2} (22M params, 384-d output). This gives us a 384-dimensional vector for each film's content.
 
-\subsection{Review Embedding (384 dimensions)}
+\subsubsection{Review Embedding (384 dimensions)}
 
 Each user review for a given film is encoded with the same SBERT model, and we average all the review vectors element-wise to get one review embedding per film. Films with no reviews get a zero vector here.
 
 We average in embedding space instead of concatenating the raw review texts. Concatenation would blow past the model's token limit for films with many reviews, and averaging gives each review equal weight no matter how long it is.
 
-\subsection{Scalar Features (4 dimensions)}
+\subsubsection{Scalar Features (4 dimensions)}
 
 \begin{itemize}
   \item \textbf{Year:} release year, so the model can pick up on era preferences
@@ -120,15 +136,15 @@ We average in embedding space instead of concatenating the raw review texts. Con
   \item \textbf{Log vote count:} $\log(1 + \text{vote\_count})$; we take the log so blockbusters with millions of votes don't dominate
 \end{itemize}
 
-\subsection{Genre Multi-Hot (19 dimensions)}
+\subsubsection{Genre Multi-Hot (19 dimensions)}
 
 A binary vector with one bit per TMDB genre (19 total). We include this because the SBERT embedding sometimes blurs similar genres together (e.g.\ ``thriller'' and ``horror''), and having explicit genre bits helps keep them distinct.
 
-\subsection{Dimensionality Reduction}
+\subsubsection{Dimensionality Reduction}
 
 We standardize all 791 features to zero mean and unit variance, then run PCA to bring it down to 128 dimensions. On our corpus, 128 components capture about 62.3\% of the variance. PCA helps mainly because the content and review SBERT vectors overlap a lot for the same film (reviews tend to mention the plot), so there is a lot of redundancy to compress out. It also speeds up the nearest-neighbor search at recommendation time.
 
-\section{Dataset Statistics}
+\subsection{Dataset Statistics}
 
 \begin{table}[h]
 \begin{tabular}{lr}
@@ -157,7 +173,7 @@ Min / Max films per user & 32 / 50 \\
 \caption{Corpus statistics after scraping and enrichment.}
 \end{table}
 
-\section{Recommendation Method}
+\subsection{Recommendation Method}
 
 Given a Letterboxd username, the system does the following:
 
@@ -175,9 +191,25 @@ Given a Letterboxd username, the system does the following:
 
 There is no training step. Everything runs against pre-computed embeddings, so it is fast. If we add a learned model later, this is the baseline.
 
-\section{Example Recommendations}
+\subsection{Reproducibility}
 
-We picked three Letterboxd users with pretty different taste to see how the system handles each one. Table~\ref{tab:recs} lists their highest-rated films next to what our system recommended. Because we pull data from each user's RSS feed, which Letterboxd caps at 50 entries, these results are based on their 50 most recent diary entries rather than their full watch history (which may be much larger). Recommendations take under two seconds per user.
+All code is available at \url{https://github.com/rayansingh/FilmSnob}. To run the full pipeline from scratch:
+
+\begin{lstlisting}
+pip install -r requirements.txt
+cp .env.example .env  # add TMDB API key
+
+python scripts/scrape_batch.py
+python scripts/build_corpus.py
+python scripts/build_embeddings.py
+python scripts/recommend.py --username <user>
+\end{lstlisting}
+
+\section{Initial Evaluation}
+
+For our initial evaluation, we plan to do a train/test split on individual users' Letterboxd rating histories, using around 50\% of their ratings for training and the remaining 50\% for testing. The predictive model will be evaluated by comparing predicted ratings against actual user ratings using standard regression metrics like mean absolute error (MAE) and root mean squared error (RMSE). For the retrieval component, we will check whether top-ranked recommendations align with the user's known preferences in genre and theme. Early results should show whether the hybrid approach performs better than a simple content-based or predictive ranking method, specifically for users with a moderate rating history.
+
+As a qualitative check, we picked three Letterboxd users with different taste to see how the system handles each one. Table~\ref{tab:recs} lists their highest-rated films next to what our system recommended. Because we pull data from each user's RSS feed, which Letterboxd caps at 50 entries, these results are based on their 50 most recent diary entries rather than their full watch history (which may be much larger). Recommendations take under two seconds per user.
 
 \begin{table*}[t]
 \small
@@ -210,21 +242,9 @@ We picked three Letterboxd users with pretty different taste to see how the syst
 
 All three get completely different lists despite some overlap in what they've watched, since the rating-weighted profile emphasizes what each user likes most.
 
-\section{Reproducibility}
+\section{Insights So Far}
 
-All code is in the project repository. To run the full pipeline from scratch:
-
-\begin{lstlisting}
-pip install -r requirements.txt
-cp .env.example .env  # add TMDB API key
-
-python scripts/scrape_batch.py
-python scripts/build_corpus.py
-python scripts/build_embeddings.py
-python scripts/recommend.py --username <user>
-\end{lstlisting}
-
-\section{Remaining Work}
+With semantic embedding, we can use extracted data from user reviews to add more meaningful signals when ratings are ambiguous or inconsistent. We also observed that user preferences are often more complex than simple genre matching; factors like themes captured in text embeddings play a major role in improving recommendations. Current limitations include some sarcastic reviews that are inconsistent with the user's rating, and balancing the weight between numerical ratings and textual sentiment, which will be a focus for fine-tuning the model.
 
 What we still need to finish before the end of the semester:
 
@@ -237,32 +257,6 @@ What we still need to finish before the end of the semester:
   \item \textbf{User study.} Have a few people try it with their own Letterboxd accounts and get feedback on whether the recommendations are any good.
   \item \textbf{Clean up codebase.} Fill in missing type hints and make sure everything runs end-to-end from a clean clone.
 \end{enumerate}
-
-\section{Conclusion}
-Summary
-The FilmSnob system has both a content-based and predictive model. Given films the user has rated, it retrieves similar films by matching descriptions, genres, casts, keywords using TF-IDF and BM25. It can also predict based on a user’s rating history the score they would assign to any candidate film, and then rank those candidates accordingly.
-
-Data comes from three general sources. The first is movie databases like IMDB and TMDB, whose APIs give us data on any film such as titles, genres, cast, crew, languages, countries of origin, keywords, and more. The second is Kaggle datasets to supply descriptions and keywords to supplement. The third is the Letterboxd platform to provide ratings and reviews from users.
-
-We evaluate the system using personal Letteboxd accounts and mock data. For a given user, we can train the model on half of the ratings and use the model to predict the other half to evaluate it. Comparing predicted ratings to actual ratings provides a direct accuracy measure.
-
-The first few weeks of the project was conducting research on existing models and methods in sentiment analysis, retrieval-augmented generation, and recommendation systems in similar fields. The following weeks were for creating a first draft of the code and creating a report for the first milestone. The final weeks are allocated to model training, integration, testing, and the final written report.
-
-Intro
-Letterboxd and MyAnimeList collectively host millions of user-generated film ratings and written reviews. These platforms capture two district signals of user preference which are numerical ratings and natural language reviews that often convey a nuance a score cannot. Despite this, neither platform has leveraged the massive amount of data they have to generate personalized recommendations for users to watch.
-
-FilmSnob is a recommender system that addresses this problem. Given a user’s Letterboxd history, the system performs sentiment analysis on written reviews, weights the resulting sentiment scores against star reviews, and constructs a preference profile for that user. It then retrieves candidate films the user has not seen, ranks them my predicted ratings, and returns a ranked recommendation list.
-
-The central challenge is representing the non-standardized data into something quantifiable. A five-star rating system compresses the user’s thoughts into a number. A written review is better but harder to mine into data. We encode both into a shared embedding vector that gives the model more perspective. We use SBERT for dense semantic embeddings. With this we build a model that estimates the score a user would give unseen films.
-
-Description
-
-Initial Evaluation
-For our initial evaluation, we plan on performing a train/test split on individual users’ Letterboxd rating histories in which we will be using around 50% of their ratings for training and the remaining 50% for testing. The predictive model was evaluated by comparing predicted ratings against the actual user rating by using standard regression metrics, something like mean absolute error (MAE) and root mean squared error (RMSE). For our retrieval component, we will assess whether top ranked recommendations aligned with the user’s known preferences in genre and themes. Early results will show that the hybrid approach will perform better than a simple content-based or predictive ranking method, specifically for users with a moderate rating history.
-
-Insights so far
-With semantic embedding, we can use extracted data from user reviews to add more meaningful signals when ratings are ambiguous or inconsistent. We also observed that user preferences are often more complex than a simple genre matching in which factors like themes captured in text embeddings are able to play a major role in improving recommendations. Current limitations that we come across include some sarcastic reviews that are inconsistent with users and balancing the weight between numerical ratings and textual ratings which will be a focus for fine tuning the model.
-
 
 \bibliographystyle{ACM-Reference-Format}
 
