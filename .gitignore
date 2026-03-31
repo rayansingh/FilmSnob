@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+data/
+!data/active_profiles.txt
+.venv/
+*.egg-info/
+dist/
+build/
+.DS_Store
